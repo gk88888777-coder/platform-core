@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  repo-hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fail if secret-like files are committed
+        run: |
+          if git ls-files | grep -E '(^|/)\.env$|\.pem$|\.key$|\.p12$|\.keystore$'; then
+            echo "ERROR: secret-like file found in the repository"
+            exit 1
+          fi
+          echo "OK: no secret-like files committed"
