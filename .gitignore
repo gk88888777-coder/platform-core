@@ -1,0 +1,23 @@
+# Secrets, कभी Git में नहीं
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.keystore
+secrets/
+
+# Dependencies और Build
+node_modules/
+dist/
+build/
+coverage/
+
+# Logs और Local डेटा
+*.log
+logs/
+pgdata/
+.DS_Store
+.idea/
+.vscode/
