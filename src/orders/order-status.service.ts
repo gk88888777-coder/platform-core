@@ -1,6 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource, EntityManager, In } from 'typeorm';
 import { CatalogService } from '../catalog/catalog.service';
+import { DispatchService } from '../dispatch/dispatch.service';
 import { OrderItem } from './order-item.entity';
 import { Order, OrderStatus } from './order.entity';
 
@@ -26,17 +27,26 @@ export class OrderStatusService {
   constructor(
     private readonly dataSource: DataSource,
     private readonly catalog: CatalogService,
+    private readonly dispatch: DispatchService,
   ) {}
 
   async advance(id: string, step: OrderStep): Promise<OrderStatusView> {
     const rule = STEPS[step];
-    // जाँच और बदलाव एक ही कमांड में: दो माँगें एक साथ आएँ तो एक ही सफल होगी
-    const result = await this.dataSource
-      .getRepository(Order)
-      .update({ id, status: rule.from }, { status: rule.to });
-    if (!result.affected) {
-      await this.explainFailure(id, this.dataSource.manager, rule.from);
-    }
+    await this.dataSource.transaction(async (manager) => {
+      // जाँच और बदलाव एक ही कमांड में: दो माँगें एक साथ आएँ तो एक ही सफल होगी
+      const result = await manager.update(
+        Order,
+        { id, status: rule.from },
+        { status: rule.to },
+      );
+      if (!result.affected) {
+        await this.explainFailure(id, manager, rule.from);
+      }
+      // डिलीवर होते ही Partner अगले काम के लिए मुक्त
+      if (step === 'deliver') {
+        await this.dispatch.closeForOrder(id, 'COMPLETED', manager);
+      }
+    });
     return { id, status: rule.to };
   }
 
@@ -50,6 +60,9 @@ export class OrderStatusService {
       if (!result.affected) {
         await this.explainFailure(id, manager, 'CREATED, ACCEPTED or PACKED');
       }
+
+      // रद्द Order का सौंपना बंद: Partner मुक्त, और वह इसे स्वीकार न कर सके
+      await this.dispatch.closeForOrder(id, 'CANCELLED', manager);
 
       const items = await manager.find(OrderItem, { where: { orderId: id } });
       items.sort((a, b) => a.productId.localeCompare(b.productId));
