@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, In, Repository } from 'typeorm';
 import { Store } from './store.entity';
 import { Product } from './product.entity';
 import { CreateStoreDto } from './dto/create-store.dto';
@@ -51,12 +51,29 @@ export class CatalogService {
     return this.products.findOneByOrFail({ id: productId });
   }
 
-  // एक ही कमांड में Stock घटाओ, और अगर काफ़ी Stock न हो तो false लौटाओ।
-  async reserveStock(productId: string, qty: number): Promise<boolean> {
+  // Order के लिए: इसी दुकान के, उपलब्ध सामान (Order की Transaction के भीतर)
+  async findForOrder(
+    storeId: string,
+    productIds: string[],
+    manager?: EntityManager,
+  ): Promise<Product[]> {
+    const repo = manager ? manager.getRepository(Product) : this.products;
+    return repo.find({
+      where: { storeId, id: In(productIds), isAvailable: true },
+    });
+  }
+
+  // एक ही कमांड में Stock घटाओ, काफ़ी Stock न हो तो false लौटाओ।
+  async reserveStock(
+    productId: string,
+    qty: number,
+    manager?: EntityManager,
+  ): Promise<boolean> {
     if (!Number.isInteger(qty) || qty <= 0) {
       throw new BadRequestException('qty must be a positive integer');
     }
-    const result = await this.products
+    const em = manager ?? this.products.manager;
+    const result = await em
       .createQueryBuilder()
       .update(Product)
       .set({ stockQty: () => `"stockQty" - ${qty}` })
