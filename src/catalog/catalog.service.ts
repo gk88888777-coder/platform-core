@@ -81,4 +81,22 @@ export class CatalogService {
       .execute();
     return (result.affected ?? 0) > 0;
   }
+
+  // Order रद्द होने पर Stock वापस जोड़ो।
+  async restoreStock(
+    productId: string,
+    qty: number,
+    manager?: EntityManager,
+  ): Promise<void> {
+    if (!Number.isInteger(qty) || qty <= 0) {
+      throw new BadRequestException('qty must be a positive integer');
+    }
+    const em = manager ?? this.products.manager;
+    await em
+      .createQueryBuilder()
+      .update(Product)
+      .set({ stockQty: () => `"stockQty" + ${qty}` })
+      .where('id = :id', { id: productId })
+      .execute();
+  }
 }
