@@ -50,6 +50,8 @@ jobs:
       POSTGRES_PASSWORD: ci_only_password
       POSTGRES_DB: ci_db
       DB_SYNCHRONIZE: "true"
+      JWT_SECRET: "ci-only-jwt-secret-used-nowhere-else-0123456789"
+      OTP_PEPPER: "ci-only-otp-pepper-used-nowhere-else-0123456789"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
