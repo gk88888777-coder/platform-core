@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { Order } from '../orders/order.entity';
 import { Assignment } from './assignment.entity';
 import { Partner } from './partner.entity';
@@ -14,6 +14,14 @@ export interface AssignmentView {
   orderId: string;
   partnerId: string;
   status: string;
+}
+
+// सूची में फ़ोन नंबर जानबूझकर नहीं
+export interface PartnerView {
+  id: string;
+  name: string;
+  isOnline: boolean;
+  isVerified: boolean;
 }
 
 @Injectable()
@@ -43,6 +51,27 @@ export class DispatchService {
       throw new NotFoundException('Partner not found');
     }
     return this.partners.findOneByOrFail({ id });
+  }
+
+  async listPartners(): Promise<PartnerView[]> {
+    const rows = await this.partners.find({
+      order: { createdAt: 'DESC' },
+      take: 100,
+    });
+    return rows.map((p) => this.toPartnerView(p));
+  }
+
+  // ऑनलाइन, सत्यापित और जिसके पास कोई सक्रिय Order नहीं
+  async listAvailable(): Promise<PartnerView[]> {
+    const rows = await this.partners
+      .createQueryBuilder('p')
+      .where('p."isOnline" = true AND p."isVerified" = true')
+      .andWhere(
+        `p.id NOT IN (SELECT a."partnerId" FROM assignments a WHERE a."status" IN ('OFFERED','ACCEPTED'))`,
+      )
+      .orderBy('p."createdAt"', 'ASC')
+      .getMany();
+    return rows.map((p) => this.toPartnerView(p));
   }
 
   // Order को अगले उपलब्ध Partner को सौंपो
@@ -112,12 +141,19 @@ export class DispatchService {
     return this.respond(assignmentId, 'REJECTED');
   }
 
-  // Partner का काम पूरा होने पर (डिलीवर या रद्द) उसे अगले Order के लिए मुक्त करो।
-  // सक्रिय सौंपना "ACCEPTED" से "REJECTED" नहीं, बल्कि पूरा हुआ मानकर बंद करें।
-  async release(orderId: string): Promise<void> {
-    await this.assignments.update(
-      { orderId, status: 'ACCEPTED' },
-      { status: 'REJECTED' },
+  // Order पूरा या रद्द होने पर उसका सक्रिय सौंपना बंद करो, ताकि Partner मुक्त हो।
+  // Orders कमरा इसे अपनी Transaction (manager) के भीतर बुलाता है।
+  async closeForOrder(
+    orderId: string,
+    to: 'COMPLETED' | 'CANCELLED',
+    manager?: EntityManager,
+  ): Promise<void> {
+    const repo = manager
+      ? manager.getRepository(Assignment)
+      : this.assignments;
+    await repo.update(
+      { orderId, status: In(['OFFERED', 'ACCEPTED']) },
+      { status: to },
     );
   }
 
@@ -137,7 +173,9 @@ export class DispatchService {
       }
       throw new ConflictException(`Assignment is already ${existing.status}`);
     }
-    return this.toView(await this.assignments.findOneByOrFail({ id: assignmentId }));
+    return this.toView(
+      await this.assignments.findOneByOrFail({ id: assignmentId }),
+    );
   }
 
   private toView(a: Assignment): AssignmentView {
@@ -146,6 +184,15 @@ export class DispatchService {
       orderId: a.orderId,
       partnerId: a.partnerId,
       status: a.status,
+    };
+  }
+
+  private toPartnerView(p: Partner): PartnerView {
+    return {
+      id: p.id,
+      name: p.name,
+      isOnline: p.isOnline,
+      isVerified: p.isVerified,
     };
   }
 }
