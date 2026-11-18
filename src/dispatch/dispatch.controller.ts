@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -10,7 +11,11 @@ import {
 import { AdminKeyGuard } from '../common/admin-key.guard';
 import { CreatePartnerDto } from './dto/create-partner.dto';
 import { SetOnlineDto } from './dto/set-online.dto';
-import { AssignmentView, DispatchService } from './dispatch.service';
+import {
+  AssignmentView,
+  DispatchService,
+  PartnerView,
+} from './dispatch.service';
 import { Partner } from './partner.entity';
 
 // अस्थायी: Partner का असली लॉगिन बनने पर वह ख़ुद स्वीकार/मना करेगा।
@@ -18,6 +23,16 @@ import { Partner } from './partner.entity';
 @Controller('v1/admin')
 export class DispatchController {
   constructor(private readonly dispatch: DispatchService) {}
+
+  @Get('partners')
+  list(): Promise<PartnerView[]> {
+    return this.dispatch.listPartners();
+  }
+
+  @Get('partners/available')
+  available(): Promise<PartnerView[]> {
+    return this.dispatch.listAvailable();
+  }
 
   @Post('partners')
   createPartner(@Body() dto: CreatePartnerDto): Promise<Partner> {
