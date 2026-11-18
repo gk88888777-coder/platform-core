@@ -6,7 +6,12 @@ import {
   PrimaryGeneratedColumn,
 } from 'typeorm';
 
-export type AssignmentStatus = 'OFFERED' | 'ACCEPTED' | 'REJECTED';
+export type AssignmentStatus =
+  | 'OFFERED'
+  | 'ACCEPTED'
+  | 'REJECTED'
+  | 'COMPLETED'
+  | 'CANCELLED';
 
 @Entity('assignments')
 // एक Order पर एक ही समय में एक ही "सक्रिय" (OFFERED या ACCEPTED) सौंपना हो सकता है
