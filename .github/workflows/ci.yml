@@ -25,6 +25,27 @@ jobs:
 
   build-and-test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci_user
+          POSTGRES_PASSWORD: ci_only_password
+          POSTGRES_DB: ci_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci_user -d ci_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ci_user
+      POSTGRES_PASSWORD: ci_only_password
+      POSTGRES_DB: ci_db
+      DB_SYNCHRONIZE: "true"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
