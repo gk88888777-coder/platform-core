@@ -1,0 +1,54 @@
+import {
+  Body,
+  Controller,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
+import { AdminKeyGuard } from '../common/admin-key.guard';
+import { CreatePartnerDto } from './dto/create-partner.dto';
+import { SetOnlineDto } from './dto/set-online.dto';
+import { AssignmentView, DispatchService } from './dispatch.service';
+import { Partner } from './partner.entity';
+
+// अस्थायी: Partner का असली लॉगिन बनने पर वह ख़ुद स्वीकार/मना करेगा।
+@UseGuards(AdminKeyGuard)
+@Controller('v1/admin')
+export class DispatchController {
+  constructor(private readonly dispatch: DispatchService) {}
+
+  @Post('partners')
+  createPartner(@Body() dto: CreatePartnerDto): Promise<Partner> {
+    return this.dispatch.createPartner(dto.name, dto.phone);
+  }
+
+  @Post('partners/:id/verify')
+  verify(@Param('id', ParseUUIDPipe) id: string): Promise<Partner> {
+    return this.dispatch.verifyPartner(id);
+  }
+
+  @Patch('partners/:id/online')
+  setOnline(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SetOnlineDto,
+  ): Promise<Partner> {
+    return this.dispatch.setOnline(id, dto.isOnline);
+  }
+
+  @Post('orders/:id/assign')
+  assign(@Param('id', ParseUUIDPipe) id: string): Promise<AssignmentView> {
+    return this.dispatch.assign(id);
+  }
+
+  @Post('assignments/:id/accept')
+  accept(@Param('id', ParseUUIDPipe) id: string): Promise<AssignmentView> {
+    return this.dispatch.accept(id);
+  }
+
+  @Post('assignments/:id/reject')
+  reject(@Param('id', ParseUUIDPipe) id: string): Promise<AssignmentView> {
+    return this.dispatch.reject(id);
+  }
+}
