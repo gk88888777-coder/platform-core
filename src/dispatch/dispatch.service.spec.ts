@@ -1,6 +1,7 @@
 import { ConflictException } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
+import { DataSource } from 'typeorm';
 import { CatalogModule } from '../catalog/catalog.module';
 import { CatalogService } from '../catalog/catalog.service';
 import { DatabaseModule } from '../database/database.module';
@@ -17,6 +18,7 @@ suite('DispatchService (integration)', () => {
   jest.setTimeout(30000);
 
   let moduleRef: TestingModule;
+  let dataSource: DataSource;
   let catalog: CatalogService;
   let orders: OrdersService;
   let status: OrderStatusService;
@@ -38,6 +40,7 @@ suite('DispatchService (integration)', () => {
         DispatchModule,
       ],
     }).compile();
+    dataSource = moduleRef.get(DataSource);
     catalog = moduleRef.get(CatalogService);
     orders = moduleRef.get(OrdersService);
     status = moduleRef.get(OrderStatusService);
@@ -46,6 +49,11 @@ suite('DispatchService (integration)', () => {
 
   afterAll(async () => {
     await moduleRef.close();
+  });
+
+  // पिछले टेस्टों के बचे Partners से टकराव न हो, इसलिए सबको ऑफ़लाइन कर दो
+  beforeEach(async () => {
+    await dataSource.query('UPDATE partners SET "isOnline" = false');
   });
 
   // स्वीकृत Order बनाओ
@@ -73,14 +81,6 @@ suite('DispatchService (integration)', () => {
     await dispatch.setOnline(partner.id, true);
     return partner;
   };
-
-  // पुराने टेस्टों के बचे हुए Partners से बचने के लिए सबको ऑफ़लाइन कर दो
-  beforeEach(async () => {
-    const all = await moduleRef
-      .get('DataSource' as never, { strict: false })
-      .query('UPDATE partners SET "isOnline" = false');
-    void all;
-  });
 
   it('assigns an accepted order to an online, verified partner', async () => {
     const partner = await readyPartner('P1');
