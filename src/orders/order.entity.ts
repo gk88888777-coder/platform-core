@@ -10,7 +10,13 @@ import {
 } from 'typeorm';
 import { OrderItem } from './order-item.entity';
 
-export type OrderStatus = 'CREATED' | 'CANCELLED';
+export type OrderStatus =
+  | 'CREATED'
+  | 'ACCEPTED'
+  | 'PACKED'
+  | 'OUT_FOR_DELIVERY'
+  | 'DELIVERED'
+  | 'CANCELLED';
 
 @Entity('orders')
 @Check('"totalPaise" >= 0')
@@ -33,6 +39,9 @@ export class Order {
 
   @Column({ type: 'varchar', length: 20, default: 'CREATED' })
   status!: OrderStatus;
+
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  cancelReason!: string | null;
 
   @Column({ type: 'varchar', length: 10, default: 'COD' })
   paymentMethod!: string;
