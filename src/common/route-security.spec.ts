@@ -10,9 +10,11 @@ import { AuthController } from '../identity/auth.controller';
 import { JwtAuthGuard } from '../identity/jwt-auth.guard';
 import { MeController } from '../identity/me.controller';
 import { ROLES_KEY, RolesGuard } from '../identity/roles.guard';
+import { MerchantOrdersController } from '../orders/merchant-orders.controller';
 import { OrderAdminController } from '../orders/order-admin.controller';
 import { OrderStatusController } from '../orders/order-status.controller';
 import { OrdersController } from '../orders/orders.controller';
+import { PartnerOrdersController } from '../orders/partner-orders.controller';
 import { AdminKeyGuard } from './admin-key.guard';
 
 // नया Controller बनाओ तो इस सूची में जोड़ना ज़रूरी है।
@@ -25,6 +27,8 @@ const CONTROLLERS: Type<unknown>[] = [
   OrdersController,
   OrderStatusController,
   OrderAdminController,
+  MerchantOrdersController,
+  PartnerOrdersController,
   DispatchController,
   PartnerController,
 ];
@@ -57,7 +61,8 @@ const routes: Route[] = CONTROLLERS.flatMap((controller) => {
   return Object.getOwnPropertyNames(controller.prototype)
     .filter(
       (name) =>
-        name !== 'constructor' && typeof controller.prototype[name] === 'function',
+        name !== 'constructor' &&
+        typeof controller.prototype[name] === 'function',
     )
     .filter(
       (name) =>
@@ -86,7 +91,7 @@ const routes: Route[] = CONTROLLERS.flatMap((controller) => {
 
 describe('Route security', () => {
   it('finds the routes it is supposed to check', () => {
-    expect(routes.length).toBeGreaterThan(30);
+    expect(routes.length).toBeGreaterThan(40);
   });
 
   it('locks every route that is not on the public list', () => {
@@ -127,5 +132,21 @@ describe('Route security', () => {
       .filter((r) => r.guards.includes(AdminKeyGuard))
       .map((r) => r.controller);
     expect(new Set(usingKey)).toEqual(new Set(['AdminUsersController']));
+  });
+
+  it('keeps merchant paths for MERCHANT and partner paths for PARTNER', () => {
+    const wrong = routes
+      .filter(
+        (r) =>
+          r.fullPath.includes('v1/merchant') || r.fullPath.includes('v1/partner'),
+      )
+      .filter((r) => {
+        const expected = r.fullPath.includes('v1/merchant')
+          ? 'MERCHANT'
+          : 'PARTNER';
+        return !r.roles || r.roles.length !== 1 || r.roles[0] !== expected;
+      })
+      .map((r) => r.id);
+    expect(wrong).toEqual([]);
   });
 });
