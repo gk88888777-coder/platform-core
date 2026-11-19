@@ -8,7 +8,8 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { AdminKeyGuard } from '../common/admin-key.guard';
+import { JwtAuthGuard } from '../identity/jwt-auth.guard';
+import { Roles, RolesGuard } from '../identity/roles.guard';
 import { CreatePartnerDto } from './dto/create-partner.dto';
 import { LinkUserDto } from './dto/link-user.dto';
 import { SetOnlineDto } from './dto/set-online.dto';
@@ -19,8 +20,9 @@ import {
 } from './dispatch.service';
 import { Partner } from './partner.entity';
 
-// अस्थायी: Admin के रास्ते अभी Admin Key पर हैं, अगले Step में ADMIN Role पर आएँगे।
-@UseGuards(AdminKeyGuard)
+// Admin के रास्ते: ADMIN Role वाला Login ज़रूरी
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN')
 @Controller('v1/admin')
 export class DispatchController {
   constructor(private readonly dispatch: DispatchService) {}
