@@ -5,12 +5,13 @@ import { Store } from './store.entity';
 import { Product } from './product.entity';
 import { CatalogService } from './catalog.service';
 import { CatalogController } from './catalog.controller';
+import { StoreAccessService } from './store-access.service';
 
 // दुकानों का सामान और Stock।
 @Module({
   imports: [TypeOrmModule.forFeature([Store, Product]), IdentityModule],
   controllers: [CatalogController],
-  providers: [CatalogService],
-  exports: [TypeOrmModule, CatalogService],
+  providers: [CatalogService, StoreAccessService],
+  exports: [TypeOrmModule, CatalogService, StoreAccessService],
 })
 export class CatalogModule {}
