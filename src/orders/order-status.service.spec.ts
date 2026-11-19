@@ -1,9 +1,12 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
+import { DataSource } from 'typeorm';
 import { CatalogModule } from '../catalog/catalog.module';
 import { CatalogService } from '../catalog/catalog.service';
 import { DatabaseModule } from '../database/database.module';
+import { DispatchModule } from '../dispatch/dispatch.module';
+import { DispatchService } from '../dispatch/dispatch.service';
 import { OrderStatusService } from './order-status.service';
 import { OrdersModule } from './orders.module';
 import { OrdersService } from './orders.service';
@@ -15,9 +18,11 @@ suite('OrderStatusService (integration)', () => {
   jest.setTimeout(30000);
 
   let moduleRef: TestingModule;
+  let dataSource: DataSource;
   let catalog: CatalogService;
   let orders: OrdersService;
   let status: OrderStatusService;
+  let dispatch: DispatchService;
 
   const customer = {
     customerName: 'Test User',
@@ -31,16 +36,24 @@ suite('OrderStatusService (integration)', () => {
         ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true }),
         DatabaseModule,
         CatalogModule,
+        DispatchModule,
         OrdersModule,
       ],
     }).compile();
+    dataSource = moduleRef.get(DataSource);
     catalog = moduleRef.get(CatalogService);
     orders = moduleRef.get(OrdersService);
     status = moduleRef.get(OrderStatusService);
+    dispatch = moduleRef.get(DispatchService);
   });
 
   afterAll(async () => {
     await moduleRef.close();
+  });
+
+  // पिछले टेस्टों के बचे Partners से टकराव न हो
+  beforeEach(async () => {
+    await dataSource.query('UPDATE partners SET "isOnline" = false');
   });
 
   // नई दुकान, उसमें 10 सामान, और उसका 2 का Order
@@ -63,11 +76,22 @@ suite('OrderStatusService (integration)', () => {
     return { order, stock };
   };
 
+  // Order को स्वीकार करके, Partner से स्वीकार करवाकर, पैक करके डिलीवरी पर निकालो
+  const outForDelivery = async (orderId: string) => {
+    await status.advance(orderId, 'accept');
+    const partner = await dispatch.createPartner('Status Partner', '9000000000');
+    await dispatch.verifyPartner(partner.id);
+    await dispatch.setOnline(partner.id, true);
+    const offer = await dispatch.assign(orderId);
+    await dispatch.accept(offer.id);
+    await status.advance(orderId, 'pack');
+    await status.advance(orderId, 'dispatch');
+  };
+
   it('moves an order through the full journey', async () => {
     const { order } = await setup('Status Mart 1');
-    expect((await status.advance(order.id, 'accept')).status).toBe('ACCEPTED');
-    expect((await status.advance(order.id, 'pack')).status).toBe('PACKED');
-    expect((await status.advance(order.id, 'dispatch')).status).toBe(
+    await outForDelivery(order.id);
+    expect((await orders.getForAdmin(order.id)).status).toBe(
       'OUT_FOR_DELIVERY',
     );
     expect((await status.advance(order.id, 'deliver')).status).toBe('DELIVERED');
@@ -78,6 +102,16 @@ suite('OrderStatusService (integration)', () => {
     await expect(status.advance(order.id, 'pack')).rejects.toThrow(
       ConflictException,
     );
+  });
+
+  it('refuses to go out for delivery without an accepted partner', async () => {
+    const { order } = await setup('Status Mart 2b');
+    await status.advance(order.id, 'accept');
+    await status.advance(order.id, 'pack');
+    await expect(status.advance(order.id, 'dispatch')).rejects.toThrow(
+      ConflictException,
+    );
+    expect((await orders.getForAdmin(order.id)).status).toBe('PACKED');
   });
 
   it('gives the stock back when an order is cancelled', async () => {
@@ -98,9 +132,7 @@ suite('OrderStatusService (integration)', () => {
 
   it('does not allow cancelling after it is out for delivery', async () => {
     const { order, stock } = await setup('Status Mart 5');
-    await status.advance(order.id, 'accept');
-    await status.advance(order.id, 'pack');
-    await status.advance(order.id, 'dispatch');
+    await outForDelivery(order.id);
     await expect(status.cancel(order.id, 'too late')).rejects.toThrow(
       ConflictException,
     );
