@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { DataSource, EntityManager, In } from 'typeorm';
 import { CatalogService } from '../catalog/catalog.service';
 import { DispatchService } from '../dispatch/dispatch.service';
@@ -41,6 +45,16 @@ export class OrderStatusService {
       );
       if (!result.affected) {
         await this.explainFailure(id, manager, rule.from);
+      }
+      // किसी Partner के स्वीकार किए बिना Order डिलीवरी पर नहीं निकल सकता।
+      // यहाँ त्रुटि आई तो ऊपर का बदलाव भी वापस हो जाता है।
+      if (step === 'dispatch') {
+        const accepted = await this.dispatch.hasAcceptedAssignment(id, manager);
+        if (!accepted) {
+          throw new ConflictException(
+            'A delivery partner must accept this order first',
+          );
+        }
       }
       // डिलीवर होते ही Partner अगले काम के लिए मुक्त
       if (step === 'deliver') {
