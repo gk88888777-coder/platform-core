@@ -1,9 +1,11 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
-import { AdminKeyGuard } from '../common/admin-key.guard';
+import { JwtAuthGuard } from '../identity/jwt-auth.guard';
+import { Roles, RolesGuard } from '../identity/roles.guard';
 import { ListOrdersQueryDto } from './dto/list-orders.query';
 import { OrderAdminService, OrderSummary } from './order-admin.service';
 
-@UseGuards(AdminKeyGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN')
 @Controller('v1/admin/orders')
 export class OrderAdminController {
   constructor(private readonly admin: OrderAdminService) {}
