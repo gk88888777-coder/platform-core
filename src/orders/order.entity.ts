@@ -20,6 +20,8 @@ export type OrderStatus =
 
 @Entity('orders')
 @Check('"totalPaise" >= 0')
+// एक ग्राहक की एक Key से एक ही Order
+@Index(['customerId', 'idempotencyKey'], { unique: true })
 export class Order {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
@@ -27,6 +29,11 @@ export class Order {
   @Index()
   @Column({ type: 'uuid' })
   storeId!: string;
+
+  // Order बनाने वाला (Login वाला उपयोगकर्ता)
+  @Index()
+  @Column({ type: 'uuid', nullable: true })
+  customerId!: string | null;
 
   @Column({ type: 'varchar', length: 100 })
   customerName!: string;
@@ -55,7 +62,7 @@ export class Order {
   @Column({ type: 'integer' })
   totalPaise!: number;
 
-  @Column({ type: 'varchar', length: 100, nullable: true, unique: true })
+  @Column({ type: 'varchar', length: 100, nullable: true })
   idempotencyKey!: string | null;
 
   @Column({ type: 'varchar', length: 64, nullable: true })
