@@ -15,7 +15,6 @@ import { OrderAdminController } from '../orders/order-admin.controller';
 import { OrderStatusController } from '../orders/order-status.controller';
 import { OrdersController } from '../orders/orders.controller';
 import { PartnerOrdersController } from '../orders/partner-orders.controller';
-import { AdminKeyGuard } from './admin-key.guard';
 
 // नया Controller बनाओ तो इस सूची में जोड़ना ज़रूरी है।
 const CONTROLLERS: Type<unknown>[] = [
@@ -97,10 +96,7 @@ describe('Route security', () => {
   it('locks every route that is not on the public list', () => {
     const open = routes
       .filter((r) => !PUBLIC.has(r.id))
-      .filter(
-        (r) =>
-          !r.guards.includes(JwtAuthGuard) && !r.guards.includes(AdminKeyGuard),
-      )
+      .filter((r) => !r.guards.includes(JwtAuthGuard))
       .map((r) => r.id);
     expect(open).toEqual([]);
   });
@@ -119,7 +115,6 @@ describe('Route security', () => {
   it('allows only the ADMIN role on admin paths', () => {
     const wrong = routes
       .filter((r) => r.fullPath.includes('admin'))
-      .filter((r) => r.controller !== 'AdminUsersController')
       .filter(
         (r) => !r.roles || r.roles.length !== 1 || r.roles[0] !== 'ADMIN',
       )
@@ -127,18 +122,23 @@ describe('Route security', () => {
     expect(wrong).toEqual([]);
   });
 
-  it('uses the temporary Admin Key only for creating the first admin', () => {
+  it('has no route protected by a shared key', () => {
     const usingKey = routes
-      .filter((r) => r.guards.includes(AdminKeyGuard))
-      .map((r) => r.controller);
-    expect(new Set(usingKey)).toEqual(new Set(['AdminUsersController']));
+      .filter((r) =>
+        r.guards.some(
+          (g) => (g as { name?: string }).name === 'AdminKeyGuard',
+        ),
+      )
+      .map((r) => r.id);
+    expect(usingKey).toEqual([]);
   });
 
   it('keeps merchant paths for MERCHANT and partner paths for PARTNER', () => {
     const wrong = routes
       .filter(
         (r) =>
-          r.fullPath.includes('v1/merchant') || r.fullPath.includes('v1/partner'),
+          r.fullPath.includes('v1/merchant') ||
+          r.fullPath.includes('v1/partner'),
       )
       .filter((r) => {
         const expected = r.fullPath.includes('v1/merchant')
