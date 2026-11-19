@@ -6,6 +6,7 @@ import {
   timingSafeEqual,
 } from 'crypto';
 import {
+  ConflictException,
   ForbiddenException,
   HttpException,
   HttpStatus,
@@ -141,6 +142,7 @@ export class AuthService implements OnModuleInit {
     if (!user.isActive) {
       throw new ForbiddenException('Account disabled');
     }
+    user = await this.maybeBootstrapAdmin(user);
     return this.issueTokens(user);
   }
 
@@ -198,15 +200,57 @@ export class AuthService implements OnModuleInit {
     return { id: user.id, phone: user.phone, role: user.role };
   }
 
-  // सिर्फ़ Admin Key से: Role बदलने पर उस आदमी के Refresh Tokens रद्द, ताकि नया Role जल्दी लागू हो
+  // सिर्फ़ ADMIN Role से। आख़िरी Admin को हटाना मना है। Role बदलने पर पुराने Refresh Tokens रद्द।
   async setRole(userId: string, role: Role): Promise<UserView> {
-    const result = await this.users.update({ id: userId }, { role });
-    if (!result.affected) {
-      throw new NotFoundException('User not found');
+    if (role === 'ADMIN') {
+      const result = await this.users.update({ id: userId }, { role });
+      if (!result.affected) {
+        throw new NotFoundException('User not found');
+      }
+    } else {
+      // जाँच और बदलाव एक ही कमांड में: कम से कम एक और Admin बचा हो तभी बदलो
+      const result = await this.users
+        .createQueryBuilder()
+        .update(User)
+        .set({ role })
+        .where(
+          `id = :id AND ("role" <> 'ADMIN' OR (SELECT count(*) FROM users WHERE "role" = 'ADMIN') > 1)`,
+          { id: userId },
+        )
+        .execute();
+      if (!result.affected) {
+        const exists = await this.users.findOneBy({ id: userId });
+        if (!exists) {
+          throw new NotFoundException('User not found');
+        }
+        throw new ConflictException('Cannot remove the last admin');
+      }
     }
     await this.revokeAllForUser(userId);
     const user = await this.users.findOneByOrFail({ id: userId });
     return { id: user.id, phone: user.phone, role: user.role };
+  }
+
+  // सर्वर की गुप्त सेटिंग BOOTSTRAP_ADMIN_PHONE वाला नंबर, OTP से Login करे,
+  // और अभी कोई भी Admin न हो, तभी वह पहला Admin बनता है। एक ही कमांड में जाँच और बदलाव।
+  private async maybeBootstrapAdmin(user: User): Promise<User> {
+    const configured = this.config.get<string>('BOOTSTRAP_ADMIN_PHONE');
+    if (!configured || configured !== user.phone || user.role === 'ADMIN') {
+      return user;
+    }
+    const result = await this.users
+      .createQueryBuilder()
+      .update(User)
+      .set({ role: 'ADMIN' })
+      .where(
+        `id = :id AND NOT EXISTS (SELECT 1 FROM users WHERE "role" = 'ADMIN')`,
+        { id: user.id },
+      )
+      .execute();
+    if (!result.affected) {
+      return user;
+    }
+    return this.users.findOneByOrFail({ id: user.id });
   }
 
   private async issueTokens(user: User): Promise<TokenPair> {
