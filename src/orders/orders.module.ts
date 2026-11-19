@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CatalogModule } from '../catalog/catalog.module';
 import { DispatchModule } from '../dispatch/dispatch.module';
+import { IdentityModule } from '../identity/identity.module';
 import { OrderAdminController } from './order-admin.controller';
 import { OrderAdminService } from './order-admin.service';
 import { OrderItem } from './order-item.entity';
@@ -17,6 +18,7 @@ import { OrdersService } from './orders.service';
     TypeOrmModule.forFeature([Order, OrderItem]),
     CatalogModule,
     DispatchModule,
+    IdentityModule,
   ],
   controllers: [OrdersController, OrderStatusController, OrderAdminController],
   providers: [OrdersService, OrderStatusService, OrderAdminService],
