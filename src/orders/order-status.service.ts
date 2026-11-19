@@ -5,11 +5,15 @@ import {
 } from '@nestjs/common';
 import { DataSource, EntityManager, In } from 'typeorm';
 import { CatalogService } from '../catalog/catalog.service';
+import { StoreAccessService } from '../catalog/store-access.service';
 import { DispatchService } from '../dispatch/dispatch.service';
+import { PartnerAccessService } from '../dispatch/partner-access.service';
 import { OrderItem } from './order-item.entity';
 import { Order, OrderStatus } from './order.entity';
 
 export type OrderStep = 'accept' | 'pack' | 'dispatch' | 'deliver';
+export type MerchantStep = Extract<OrderStep, 'accept' | 'pack'>;
+export type PartnerStep = Extract<OrderStep, 'dispatch' | 'deliver'>;
 
 const STEPS: Record<OrderStep, { from: OrderStatus; to: OrderStatus }> = {
   accept: { from: 'CREATED', to: 'ACCEPTED' },
@@ -32,7 +36,44 @@ export class OrderStatusService {
     private readonly dataSource: DataSource,
     private readonly catalog: CatalogService,
     private readonly dispatch: DispatchService,
+    private readonly stores: StoreAccessService,
+    private readonly partnerAccess: PartnerAccessService,
   ) {}
+
+  // दुकानदार: सिर्फ़ अपनी दुकान के Order पर। दूसरी दुकान का हो तो 404।
+  async advanceAsMerchant(
+    userId: string,
+    id: string,
+    step: MerchantStep,
+  ): Promise<OrderStatusView> {
+    await this.assertMerchantOwns(userId, id);
+    return this.advance(id, step);
+  }
+
+  async cancelAsMerchant(
+    userId: string,
+    id: string,
+    reason: string,
+  ): Promise<OrderStatusView> {
+    await this.assertMerchantOwns(userId, id);
+    return this.cancel(id, reason);
+  }
+
+  // Partner: सिर्फ़ उस Order पर जिसे उसी ने स्वीकार किया है। वरना 404।
+  async advanceAsPartner(
+    userId: string,
+    id: string,
+    step: PartnerStep,
+  ): Promise<OrderStatusView> {
+    const accepted = await this.partnerAccess.partnerHasAcceptedOrder(
+      userId,
+      id,
+    );
+    if (!accepted) {
+      throw new NotFoundException('Order not found');
+    }
+    return this.advance(id, step);
+  }
 
   async advance(id: string, step: OrderStep): Promise<OrderStatusView> {
     const rule = STEPS[step];
@@ -85,6 +126,15 @@ export class OrderStatusService {
       }
     });
     return { id, status: 'CANCELLED' };
+  }
+
+  private async assertMerchantOwns(userId: string, id: string): Promise<void> {
+    const order = await this.dataSource
+      .getRepository(Order)
+      .findOne({ where: { id }, select: { id: true, storeId: true } });
+    if (!order || !(await this.stores.isStoreOwner(order.storeId, userId))) {
+      throw new NotFoundException('Order not found');
+    }
   }
 
   private async explainFailure(
