@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { CatalogModule } from '../catalog/catalog.module';
 import { DispatchModule } from '../dispatch/dispatch.module';
 import { IdentityModule } from '../identity/identity.module';
+import { MerchantOrdersController } from './merchant-orders.controller';
 import { OrderAdminController } from './order-admin.controller';
 import { OrderAdminService } from './order-admin.service';
 import { OrderItem } from './order-item.entity';
@@ -11,6 +12,7 @@ import { OrderStatusController } from './order-status.controller';
 import { OrderStatusService } from './order-status.service';
 import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
+import { PartnerOrdersController } from './partner-orders.controller';
 
 // Order का चक्र।
 @Module({
@@ -20,7 +22,13 @@ import { OrdersService } from './orders.service';
     DispatchModule,
     IdentityModule,
   ],
-  controllers: [OrdersController, OrderStatusController, OrderAdminController],
+  controllers: [
+    OrdersController,
+    OrderStatusController,
+    OrderAdminController,
+    MerchantOrdersController,
+    PartnerOrdersController,
+  ],
   providers: [OrdersService, OrderStatusService, OrderAdminService],
   exports: [OrderAdminService],
 })
