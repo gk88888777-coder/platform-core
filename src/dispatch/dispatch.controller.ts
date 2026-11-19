@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { AdminKeyGuard } from '../common/admin-key.guard';
 import { CreatePartnerDto } from './dto/create-partner.dto';
+import { LinkUserDto } from './dto/link-user.dto';
 import { SetOnlineDto } from './dto/set-online.dto';
 import {
   AssignmentView,
@@ -18,7 +19,7 @@ import {
 } from './dispatch.service';
 import { Partner } from './partner.entity';
 
-// अस्थायी: Partner का असली लॉगिन बनने पर वह ख़ुद स्वीकार/मना करेगा।
+// अस्थायी: Admin के रास्ते अभी Admin Key पर हैं, अगले Step में ADMIN Role पर आएँगे।
 @UseGuards(AdminKeyGuard)
 @Controller('v1/admin')
 export class DispatchController {
@@ -42,6 +43,14 @@ export class DispatchController {
   @Post('partners/:id/verify')
   verify(@Param('id', ParseUUIDPipe) id: string): Promise<Partner> {
     return this.dispatch.verifyPartner(id);
+  }
+
+  @Post('partners/:id/link-user')
+  linkUser(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: LinkUserDto,
+  ): Promise<PartnerView> {
+    return this.dispatch.linkUser(id, dto.userId);
   }
 
   @Patch('partners/:id/online')
