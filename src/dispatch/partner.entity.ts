@@ -10,6 +10,10 @@ export class Partner {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
+  // इस Partner प्रोफ़ाइल से जुड़ा Login वाला अकाउंट (एक अकाउंट, एक Partner)
+  @Column({ type: 'uuid', nullable: true, unique: true })
+  userId!: string | null;
+
   @Column({ type: 'varchar', length: 100 })
   name!: string;
 
