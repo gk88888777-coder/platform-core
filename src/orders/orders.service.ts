@@ -6,11 +6,11 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash } from 'crypto';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, IsNull, Repository } from 'typeorm';
 import { CatalogService } from '../catalog/catalog.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderItem } from './order-item.entity';
-import { Order } from './order.entity';
+import { Order, OrderStatus } from './order.entity';
 
 // अस्थायी ₹20: Requires Business Decision
 const DELIVERY_FEE_PAISE = 2000;
@@ -32,6 +32,14 @@ export interface OrderView {
   }[];
 }
 
+export interface OrderListItem {
+  id: string;
+  storeId: string;
+  status: OrderStatus;
+  totalPaise: number;
+  createdAt: Date;
+}
+
 @Injectable()
 export class OrdersService {
   constructor(
@@ -43,6 +51,7 @@ export class OrdersService {
   async create(
     dto: CreateOrderDto,
     idempotencyKey?: string,
+    customerId?: string,
   ): Promise<OrderView> {
     // एक ही सामान दो बार आए तो मात्राएँ जोड़ दो
     const wanted = new Map<string, number>();
@@ -64,7 +73,7 @@ export class OrdersService {
       .digest('hex');
 
     if (idempotencyKey) {
-      const existing = await this.findByKey(idempotencyKey);
+      const existing = await this.findByKey(idempotencyKey, customerId ?? null);
       if (existing) {
         return this.replay(existing, requestHash);
       }
@@ -109,6 +118,7 @@ export class OrdersService {
 
         const entity = manager.create(Order, {
           storeId: dto.storeId,
+          customerId: customerId ?? null,
           customerName: dto.customerName,
           customerPhone: dto.customerPhone,
           deliveryAddress: dto.deliveryAddress,
@@ -127,13 +137,54 @@ export class OrdersService {
     } catch (error) {
       // दो एक जैसी माँगें एक साथ आईं: Database ने दोहराव रोका
       if (idempotencyKey && (error as { code?: string }).code === '23505') {
-        const existing = await this.findByKey(idempotencyKey);
+        const existing = await this.findByKey(
+          idempotencyKey,
+          customerId ?? null,
+        );
         if (existing) {
           return this.replay(existing, requestHash);
         }
       }
       throw error;
     }
+  }
+
+  // ग्राहक अपना ही Order देखे: दूसरे का हो तो 404, ताकि उसके होने का भी पता न चले
+  async getForCustomer(id: string, customerId: string): Promise<OrderView> {
+    const order = await this.orders.findOne({
+      where: { id, customerId },
+      relations: { items: true },
+    });
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+    return this.toView(order);
+  }
+
+  async listForCustomer(
+    customerId: string,
+    status: OrderStatus | undefined,
+    limit: number,
+  ): Promise<OrderListItem[]> {
+    const rows = await this.orders.find({
+      where: status ? { customerId, status } : { customerId },
+      order: { createdAt: 'DESC' },
+      take: limit,
+      select: {
+        id: true,
+        storeId: true,
+        status: true,
+        totalPaise: true,
+        createdAt: true,
+      },
+    });
+    return rows.map((o) => ({
+      id: o.id,
+      storeId: o.storeId,
+      status: o.status,
+      totalPaise: o.totalPaise,
+      createdAt: o.createdAt,
+    }));
   }
 
   async getForAdmin(id: string): Promise<Order> {
@@ -147,14 +198,18 @@ export class OrdersService {
     return order;
   }
 
-  private findByKey(idempotencyKey: string): Promise<Order | null> {
+  // Key की खोज हमेशा उसी ग्राहक के भीतर: दूसरे ग्राहक की Key से कुछ नहीं मिलेगा
+  private findByKey(
+    idempotencyKey: string,
+    customerId: string | null,
+  ): Promise<Order | null> {
     return this.orders.findOne({
-      where: { idempotencyKey },
+      where: { idempotencyKey, customerId: customerId ?? IsNull() },
       relations: { items: true },
     });
   }
 
-  // वही Key पर अलग माँग आए तो मना: किसी का पुराना Order दूसरा न पढ़ सके
+  // वही Key पर अलग माँग आए तो मना
   private replay(existing: Order, requestHash: string): OrderView {
     if (existing.requestHash !== requestHash) {
       throw new ConflictException(
