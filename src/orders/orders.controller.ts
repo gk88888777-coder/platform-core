@@ -13,7 +13,6 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { AdminKeyGuard } from '../common/admin-key.guard';
 import { AuthedRequest } from '../identity/auth.types';
 import { JwtAuthGuard } from '../identity/jwt-auth.guard';
 import { Roles, RolesGuard } from '../identity/roles.guard';
@@ -78,8 +77,9 @@ export class OrdersController {
     return this.orders.getForCustomer(id, userIdOf(request));
   }
 
-  // अस्थायी: Admin Key से
-  @UseGuards(AdminKeyGuard)
+  // Admin: किसी भी Order का पूरा ब्योरा
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
   @Get('admin/orders/:id')
   getForAdmin(@Param('id', ParseUUIDPipe) id: string): Promise<Order> {
     return this.orders.getForAdmin(id);
