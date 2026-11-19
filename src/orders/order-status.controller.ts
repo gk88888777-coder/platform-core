@@ -6,12 +6,14 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { AdminKeyGuard } from '../common/admin-key.guard';
+import { JwtAuthGuard } from '../identity/jwt-auth.guard';
+import { Roles, RolesGuard } from '../identity/roles.guard';
 import { CancelOrderDto } from './dto/cancel-order.dto';
 import { OrderStatusService, OrderStatusView } from './order-status.service';
 
-// अस्थायी: असली लॉगिन बनने पर दुकानदार और Partner अपने हिस्से के बदलाव ख़ुद करेंगे।
-@UseGuards(AdminKeyGuard)
+// अस्थायी: दुकानदार और Partner अपने हिस्से के बदलाव ख़ुद करें, यह बाद में।
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN')
 @Controller('v1/admin/orders')
 export class OrderStatusController {
   constructor(private readonly status: OrderStatusService) {}
