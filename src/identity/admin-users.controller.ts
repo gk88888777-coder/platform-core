@@ -7,13 +7,15 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { AdminKeyGuard } from '../common/admin-key.guard';
 import { AuthService } from './auth.service';
 import { UserView } from './auth.types';
 import { SetRoleDto } from './dto/set-role.dto';
+import { JwtAuthGuard } from './jwt-auth.guard';
+import { Roles, RolesGuard } from './roles.guard';
 
-// अस्थायी: पहला ADMIN बनाने का रास्ता। सब रास्ते Login पर आने के बाद Admin Key हटेगी।
-@UseGuards(AdminKeyGuard)
+// सिर्फ़ ADMIN Role वाला Login। पहला Admin BOOTSTRAP_ADMIN_PHONE से बनता है।
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN')
 @Controller('v1/admin/users')
 export class AdminUsersController {
   constructor(private readonly auth: AuthService) {}
