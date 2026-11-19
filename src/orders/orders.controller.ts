@@ -7,22 +7,39 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
+  Req,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { AdminKeyGuard } from '../common/admin-key.guard';
+import { AuthedRequest } from '../identity/auth.types';
+import { JwtAuthGuard } from '../identity/jwt-auth.guard';
+import { Roles, RolesGuard } from '../identity/roles.guard';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { ListOrdersQueryDto } from './dto/list-orders.query';
 import { Order } from './order.entity';
-import { OrderView, OrdersService } from './orders.service';
+import { OrderListItem, OrderView, OrdersService } from './orders.service';
+
+const userIdOf = (request: AuthedRequest): string => {
+  if (!request.user) {
+    throw new UnauthorizedException();
+  }
+  return request.user.userId;
+};
 
 @Controller('v1')
 export class OrdersController {
   constructor(private readonly orders: OrdersService) {}
 
-  // Order बनाना: सख़्त सीमा, 1 मिनट में 10 माँगें
+  // ग्राहक: Order बनाना। सख़्त सीमा, 1 मिनट में 10 माँगें।
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('CUSTOMER')
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('orders')
   create(
+    @Req() request: AuthedRequest,
     @Body() dto: CreateOrderDto,
     @Headers('idempotency-key') idempotencyKey?: string,
   ): Promise<OrderView> {
@@ -32,10 +49,36 @@ export class OrdersController {
     ) {
       throw new BadRequestException('Invalid Idempotency-Key');
     }
-    return this.orders.create(dto, idempotencyKey);
+    return this.orders.create(dto, idempotencyKey, userIdOf(request));
   }
 
-  // अभी सिर्फ़ Admin: ग्राहक का Order देखना असली लॉगिन के बाद
+  // ग्राहक: अपने Orders की सूची
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('CUSTOMER')
+  @Get('orders')
+  listMine(
+    @Req() request: AuthedRequest,
+    @Query() query: ListOrdersQueryDto,
+  ): Promise<OrderListItem[]> {
+    return this.orders.listForCustomer(
+      userIdOf(request),
+      query.status,
+      query.limit ?? 20,
+    );
+  }
+
+  // ग्राहक: अपना एक Order
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('CUSTOMER')
+  @Get('orders/:id')
+  getMine(
+    @Req() request: AuthedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<OrderView> {
+    return this.orders.getForCustomer(id, userIdOf(request));
+  }
+
+  // अस्थायी: Admin Key से
   @UseGuards(AdminKeyGuard)
   @Get('admin/orders/:id')
   getForAdmin(@Param('id', ParseUUIDPipe) id: string): Promise<Order> {
