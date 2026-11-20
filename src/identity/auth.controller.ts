@@ -2,6 +2,7 @@ import { Body, Controller, HttpCode, Post } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { TokenPair } from './auth.types';
+import { GoogleLoginDto } from './dto/google-login.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { RequestOtpDto } from './dto/request-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
@@ -9,6 +10,13 @@ import { VerifyOtpDto } from './dto/verify-otp.dto';
 @Controller('v1/auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
+
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @HttpCode(200)
+  @Post('google')
+  googleLogin(@Body() dto: GoogleLoginDto): Promise<TokenPair> {
+    return this.auth.loginWithGoogle(dto.idToken);
+  }
 
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @HttpCode(200)
