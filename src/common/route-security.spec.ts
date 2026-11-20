@@ -35,6 +35,7 @@ const CONTROLLERS: Type<unknown>[] = [
 // जानबूझकर खुले रास्ते: हर एक का यहाँ नाम लिखना ज़रूरी है।
 const PUBLIC = new Set([
   'HealthController.check',
+  'AuthController.googleLogin',
   'AuthController.requestOtp',
   'AuthController.verifyOtp',
   'AuthController.refresh',
