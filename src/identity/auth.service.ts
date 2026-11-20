@@ -22,6 +22,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, MoreThan, Repository } from 'typeorm';
 import { requireSecret } from './auth-config';
 import { TokenPair, UserView } from './auth.types';
+import { GOOGLE_VERIFIER, GoogleTokenVerifier } from './google-verifier';
 import { OtpChallenge } from './otp-challenge.entity';
 import { OTP_SENDER, OtpSender } from './otp-sender';
 import { RefreshToken } from './refresh-token.entity';
@@ -50,11 +51,48 @@ export class AuthService implements OnModuleInit {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     @Inject(OTP_SENDER) private readonly sender: OtpSender,
+    @Inject(GOOGLE_VERIFIER) private readonly google: GoogleTokenVerifier,
   ) {}
 
   onModuleInit(): void {
     requireSecret(this.config, 'JWT_SECRET');
     requireSecret(this.config, 'OTP_PEPPER');
+  }
+
+  // Google से Login: Token की जाँच सर्वर पर, फिर पहचान सिर्फ़ `sub` से
+  async loginWithGoogle(idToken: string): Promise<TokenPair> {
+    const identity = await this.google.verify(idToken);
+
+    let user = await this.users.findOneBy({ googleSub: identity.sub });
+    if (!user) {
+      try {
+        user = await this.users.save(
+          this.users.create({
+            googleSub: identity.sub,
+            email: identity.email,
+            name: identity.name,
+            role: 'CUSTOMER',
+          }),
+        );
+      } catch (error) {
+        if ((error as { code?: string }).code !== '23505') {
+          throw error;
+        }
+        user = await this.users.findOneByOrFail({ googleSub: identity.sub });
+      }
+    } else if (user.email !== identity.email || user.name !== identity.name) {
+      await this.users.update(
+        { id: user.id },
+        { email: identity.email, name: identity.name },
+      );
+      user.email = identity.email;
+      user.name = identity.name;
+    }
+    if (!user.isActive) {
+      throw new ForbiddenException('Account disabled');
+    }
+    user = await this.maybeBootstrapAdmin(user);
+    return this.issueTokens(user);
   }
 
   async requestOtp(phone: string): Promise<void> {
@@ -197,7 +235,7 @@ export class AuthService implements OnModuleInit {
     if (!user || !user.isActive) {
       throw new UnauthorizedException();
     }
-    return { id: user.id, phone: user.phone, role: user.role };
+    return this.toView(user);
   }
 
   // सिर्फ़ ADMIN Role से। आख़िरी Admin को हटाना मना है। Role बदलने पर पुराने Refresh Tokens रद्द।
@@ -227,15 +265,25 @@ export class AuthService implements OnModuleInit {
       }
     }
     await this.revokeAllForUser(userId);
-    const user = await this.users.findOneByOrFail({ id: userId });
-    return { id: user.id, phone: user.phone, role: user.role };
+    return this.toView(await this.users.findOneByOrFail({ id: userId }));
   }
 
-  // सर्वर की गुप्त सेटिंग BOOTSTRAP_ADMIN_PHONE वाला नंबर, OTP से Login करे,
+  // सर्वर की गुप्त सेटिंग (BOOTSTRAP_ADMIN_PHONE या BOOTSTRAP_ADMIN_EMAIL) वाला व्यक्ति Login करे,
   // और अभी कोई भी Admin न हो, तभी वह पहला Admin बनता है। एक ही कमांड में जाँच और बदलाव।
+  // ईमेल तभी मिलता है जब Google ने उसे सत्यापित बताया हो (google-verifier में जाँचा जाता है)।
   private async maybeBootstrapAdmin(user: User): Promise<User> {
-    const configured = this.config.get<string>('BOOTSTRAP_ADMIN_PHONE');
-    if (!configured || configured !== user.phone || user.role === 'ADMIN') {
+    if (user.role === 'ADMIN') {
+      return user;
+    }
+    const phone = this.config.get<string>('BOOTSTRAP_ADMIN_PHONE');
+    const email = this.config
+      .get<string>('BOOTSTRAP_ADMIN_EMAIL')
+      ?.trim()
+      .toLowerCase();
+    const phoneMatches = !!phone && phone === user.phone;
+    const emailMatches =
+      !!email && !!user.email && email === user.email.toLowerCase();
+    if (!phoneMatches && !emailMatches) {
       return user;
     }
     const result = await this.users
@@ -251,6 +299,15 @@ export class AuthService implements OnModuleInit {
       return user;
     }
     return this.users.findOneByOrFail({ id: user.id });
+  }
+
+  private toView(user: User): UserView {
+    return {
+      id: user.id,
+      phone: user.phone,
+      email: user.email,
+      role: user.role,
+    };
   }
 
   private async issueTokens(user: User): Promise<TokenPair> {
