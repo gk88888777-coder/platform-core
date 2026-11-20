@@ -6,6 +6,7 @@ import { AdminUsersController } from './admin-users.controller';
 import { requireSecret } from './auth-config';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { GOOGLE_VERIFIER, GoogleLibraryVerifier } from './google-verifier';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { MeController } from './me.controller';
 import { OtpChallenge } from './otp-challenge.entity';
@@ -14,7 +15,7 @@ import { RefreshToken } from './refresh-token.entity';
 import { RolesGuard } from './roles.guard';
 import { User } from './user.entity';
 
-// लॉगिन, OTP और Roles।
+// लॉगिन (Google और OTP) और Roles।
 @Module({
   imports: [
     TypeOrmModule.forFeature([User, OtpChallenge, RefreshToken]),
@@ -32,6 +33,7 @@ import { User } from './user.entity';
     JwtAuthGuard,
     RolesGuard,
     { provide: OTP_SENDER, useClass: ConsoleOtpSender },
+    { provide: GOOGLE_VERIFIER, useClass: GoogleLibraryVerifier },
   ],
   exports: [JwtModule, JwtAuthGuard, RolesGuard],
 })
