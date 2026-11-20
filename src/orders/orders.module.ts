@@ -7,6 +7,7 @@ import { MerchantOrdersController } from './merchant-orders.controller';
 import { OrderAdminController } from './order-admin.controller';
 import { OrderAdminService } from './order-admin.service';
 import { OrderItem } from './order-item.entity';
+import { OrderLimitsService } from './order-limits.service';
 import { Order } from './order.entity';
 import { OrderStatusController } from './order-status.controller';
 import { OrderStatusService } from './order-status.service';
@@ -29,7 +30,12 @@ import { PartnerOrdersController } from './partner-orders.controller';
     MerchantOrdersController,
     PartnerOrdersController,
   ],
-  providers: [OrdersService, OrderStatusService, OrderAdminService],
+  providers: [
+    OrdersService,
+    OrderStatusService,
+    OrderAdminService,
+    OrderLimitsService,
+  ],
   exports: [OrderAdminService],
 })
 export class OrdersModule {}
