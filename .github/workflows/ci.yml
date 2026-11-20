@@ -21,7 +21,7 @@ jobs:
 
       - name: Fail if secret-like files are committed
         run: |
-          if git ls-files | grep -E '(^|/)\.env$|\.pem$|\.key$|\.p12$|\.keystore$'; then
+          if git ls-files | grep -E '(^|/)\.env$|\.pem$|\.key$|\.p12$|\.keystore$|(^|/)client_secret[^/]*\.json$|(^|/)google-services\.json$|(^|/)GoogleService-Info\.plist$'; then
             echo "ERROR: secret-like file found in the repository"
             exit 1
           fi
