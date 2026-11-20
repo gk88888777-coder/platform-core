@@ -10,6 +10,8 @@ export interface OrderSummary {
   storeId: string;
   status: OrderStatus;
   totalPaise: number;
+  customerPhoneVerified: boolean;
+  needsConfirmationCall: boolean;
   createdAt: Date;
 }
 
@@ -42,6 +44,8 @@ export class OrderAdminService {
         storeId: true,
         status: true,
         totalPaise: true,
+        customerPhoneVerified: true,
+        needsConfirmationCall: true,
         createdAt: true,
       },
     });
@@ -50,6 +54,8 @@ export class OrderAdminService {
       storeId: o.storeId,
       status: o.status,
       totalPaise: o.totalPaise,
+      customerPhoneVerified: o.customerPhoneVerified,
+      needsConfirmationCall: o.needsConfirmationCall,
       createdAt: o.createdAt,
     }));
   }
