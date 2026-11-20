@@ -19,6 +19,7 @@ export interface TokenPair {
 
 export interface UserView {
   id: string;
-  phone: string;
+  phone: string | null;
+  email: string | null;
   role: Role;
 }
