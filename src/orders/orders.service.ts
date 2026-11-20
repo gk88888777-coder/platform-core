@@ -10,6 +10,7 @@ import { DataSource, IsNull, Repository } from 'typeorm';
 import { CatalogService } from '../catalog/catalog.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderItem } from './order-item.entity';
+import { OrderLimitsService } from './order-limits.service';
 import { Order, OrderStatus } from './order.entity';
 
 // अस्थायी ₹20: Requires Business Decision
@@ -46,6 +47,7 @@ export class OrdersService {
     @InjectRepository(Order) private readonly orders: Repository<Order>,
     private readonly dataSource: DataSource,
     private readonly catalog: CatalogService,
+    private readonly limits: OrderLimitsService,
   ) {}
 
   async create(
@@ -81,6 +83,11 @@ export class OrdersService {
 
     try {
       const saved = await this.dataSource.transaction(async (manager) => {
+        // ग्राहक की स्थिति और ताला सबसे पहले: उसके दो Orders एक साथ आएँ तो एक-एक करके
+        const standing = customerId
+          ? await this.limits.assess(manager, customerId, dto.customerPhone)
+          : null;
+
         const products = await this.catalog.findForOrder(
           dto.storeId,
           [...wanted.keys()],
@@ -116,17 +123,27 @@ export class OrdersService {
           );
         }
 
+        const total = subtotal + DELIVERY_FEE_PAISE;
+        // सीमा टूटे तो यहीं त्रुटि: पूरा Transaction वापस, यानी Stock भी लौट आता है
+        if (standing) {
+          this.limits.enforce(standing, total);
+        }
+
         const entity = manager.create(Order, {
           storeId: dto.storeId,
           customerId: customerId ?? null,
           customerName: dto.customerName,
           customerPhone: dto.customerPhone,
+          customerPhoneVerified: standing?.phoneVerified ?? false,
+          needsConfirmationCall: standing
+            ? this.limits.needsConfirmationCall(standing)
+            : false,
           deliveryAddress: dto.deliveryAddress,
           status: 'CREATED',
           paymentMethod: 'COD',
           subtotalPaise: subtotal,
           deliveryFeePaise: DELIVERY_FEE_PAISE,
-          totalPaise: subtotal + DELIVERY_FEE_PAISE,
+          totalPaise: total,
           idempotencyKey: idempotencyKey ?? null,
           requestHash,
           items,
