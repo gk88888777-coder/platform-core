@@ -41,6 +41,14 @@ export class Order {
   @Column({ type: 'varchar', length: 20 })
   customerPhone!: string;
 
+  // क्या यह नंबर उसी अकाउंट का OTP से जाँचा हुआ नंबर है
+  @Column({ type: 'boolean', default: false })
+  customerPhoneVerified!: boolean;
+
+  // नया ग्राहक और असत्यापित फ़ोन: टीम को पहले Order पर कॉल करके पक्का करना है
+  @Column({ type: 'boolean', default: false })
+  needsConfirmationCall!: boolean;
+
   @Column({ type: 'varchar', length: 500 })
   deliveryAddress!: string;
 
