@@ -1,35 +1,36 @@
 import 'reflect-metadata';
+import * as fs from 'fs';
+import * as path from 'path';
 import { Type } from '@nestjs/common';
 import { GUARDS_METADATA, PATH_METADATA } from '@nestjs/common/constants';
-import { CatalogController } from '../catalog/catalog.controller';
-import { DispatchController } from '../dispatch/dispatch.controller';
-import { PartnerController } from '../dispatch/partner.controller';
-import { HealthController } from '../health/health.controller';
-import { AdminUsersController } from '../identity/admin-users.controller';
-import { AuthController } from '../identity/auth.controller';
 import { JwtAuthGuard } from '../identity/jwt-auth.guard';
-import { MeController } from '../identity/me.controller';
 import { ROLES_KEY, RolesGuard } from '../identity/roles.guard';
-import { MerchantOrdersController } from '../orders/merchant-orders.controller';
-import { OrderAdminController } from '../orders/order-admin.controller';
-import { OrderStatusController } from '../orders/order-status.controller';
-import { OrdersController } from '../orders/orders.controller';
-import { PartnerOrdersController } from '../orders/partner-orders.controller';
 
-// नया Controller बनाओ तो इस सूची में जोड़ना ज़रूरी है।
+// सारे *.controller.ts अपने-आप खोजे जाते हैं: नया Controller जोड़ने पर यह फ़ाइल बदलनी नहीं पड़ेगी।
+const SRC_ROOT = path.resolve(__dirname, '..');
+
+function controllerFiles(dir: string): string[] {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      return controllerFiles(full);
+    }
+    return entry.name.endsWith('.controller.ts') ? [full] : [];
+  });
+}
+
+const FILES = controllerFiles(SRC_ROOT);
+
 const CONTROLLERS: Type<unknown>[] = [
-  HealthController,
-  AuthController,
-  MeController,
-  AdminUsersController,
-  CatalogController,
-  OrdersController,
-  OrderStatusController,
-  OrderAdminController,
-  MerchantOrdersController,
-  PartnerOrdersController,
-  DispatchController,
-  PartnerController,
+  ...new Set(
+    FILES.flatMap((file) =>
+      Object.values(require(file) as Record<string, unknown>).filter(
+        (value): value is Type<unknown> =>
+          typeof value === 'function' &&
+          Reflect.getMetadata(PATH_METADATA, value) !== undefined,
+      ),
+    ),
+  ),
 ];
 
 // जानबूझकर खुले रास्ते: हर एक का यहाँ नाम लिखना ज़रूरी है।
@@ -90,6 +91,23 @@ const routes: Route[] = CONTROLLERS.flatMap((controller) => {
 });
 
 describe('Route security', () => {
+  it('discovers the known controllers automatically', () => {
+    const names = CONTROLLERS.map((c) => c.name);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        'AuthController',
+        'OrdersController',
+        'DispatchController',
+        'OpsController',
+        'CustomersController',
+      ]),
+    );
+  });
+
+  it('finds at least one controller in every controller file', () => {
+    expect(CONTROLLERS.length).toBeGreaterThanOrEqual(FILES.length);
+  });
+
   it('finds the routes it is supposed to check', () => {
     expect(routes.length).toBeGreaterThan(40);
   });
