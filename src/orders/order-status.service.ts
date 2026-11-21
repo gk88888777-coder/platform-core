@@ -8,6 +8,8 @@ import { CatalogService } from '../catalog/catalog.service';
 import { StoreAccessService } from '../catalog/store-access.service';
 import { DispatchService } from '../dispatch/dispatch.service';
 import { PartnerAccessService } from '../dispatch/partner-access.service';
+import { OrderEvents } from '../events/event-types';
+import { EventsService } from '../events/events.service';
 import { OrderItem } from './order-item.entity';
 import { Order, OrderStatus } from './order.entity';
 
@@ -20,6 +22,13 @@ const STEPS: Record<OrderStep, { from: OrderStatus; to: OrderStatus }> = {
   pack: { from: 'ACCEPTED', to: 'PACKED' },
   dispatch: { from: 'PACKED', to: 'OUT_FOR_DELIVERY' },
   deliver: { from: 'OUT_FOR_DELIVERY', to: 'DELIVERED' },
+};
+
+const EVENT_FOR_STEP: Record<OrderStep, string> = {
+  accept: OrderEvents.ACCEPTED,
+  pack: OrderEvents.PACKED,
+  dispatch: OrderEvents.OUT_FOR_DELIVERY,
+  deliver: OrderEvents.DELIVERED,
 };
 
 // डिलीवरी पर निकलने से पहले तक ही रद्द हो सकता है
@@ -38,6 +47,7 @@ export class OrderStatusService {
     private readonly dispatch: DispatchService,
     private readonly stores: StoreAccessService,
     private readonly partnerAccess: PartnerAccessService,
+    private readonly events: EventsService,
   ) {}
 
   // दुकानदार: सिर्फ़ अपनी दुकान के Order पर। दूसरी दुकान का हो तो 404।
@@ -101,6 +111,7 @@ export class OrderStatusService {
       if (step === 'deliver') {
         await this.dispatch.closeForOrder(id, 'COMPLETED', manager);
       }
+      await this.emit(manager, id, EVENT_FOR_STEP[step]);
     });
     return { id, status: rule.to };
   }
@@ -124,8 +135,29 @@ export class OrderStatusService {
       for (const item of items) {
         await this.catalog.restoreStock(item.productId, item.qty, manager);
       }
+      await this.emit(manager, id, OrderEvents.CANCELLED);
     });
     return { id, status: 'CANCELLED' };
+  }
+
+  private async emit(
+    manager: EntityManager,
+    id: string,
+    type: string,
+  ): Promise<void> {
+    const order = await manager.findOne(Order, {
+      where: { id },
+      select: { id: true, storeId: true, customerId: true, totalPaise: true },
+    });
+    if (!order) {
+      return;
+    }
+    await this.events.record(manager, type, id, {
+      orderId: order.id,
+      storeId: order.storeId,
+      customerId: order.customerId,
+      totalPaise: order.totalPaise,
+    });
   }
 
   private async assertMerchantOwns(userId: string, id: string): Promise<void> {
