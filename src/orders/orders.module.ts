@@ -2,7 +2,9 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CatalogModule } from '../catalog/catalog.module';
 import { DispatchModule } from '../dispatch/dispatch.module';
+import { EventsModule } from '../events/events.module';
 import { IdentityModule } from '../identity/identity.module';
+import { PricingModule } from '../pricing/pricing.module';
 import { MerchantOrdersController } from './merchant-orders.controller';
 import { OrderAdminController } from './order-admin.controller';
 import { OrderAdminService } from './order-admin.service';
@@ -22,6 +24,8 @@ import { PartnerOrdersController } from './partner-orders.controller';
     CatalogModule,
     DispatchModule,
     IdentityModule,
+    EventsModule,
+    PricingModule,
   ],
   controllers: [
     OrdersController,
