@@ -8,13 +8,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { createHash } from 'crypto';
 import { DataSource, IsNull, Repository } from 'typeorm';
 import { CatalogService } from '../catalog/catalog.service';
+import { OrderEvents } from '../events/event-types';
+import { EventsService } from '../events/events.service';
+import { PricingService } from '../pricing/pricing.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderItem } from './order-item.entity';
 import { OrderLimitsService } from './order-limits.service';
 import { Order, OrderStatus } from './order.entity';
-
-// अस्थायी ₹20: Requires Business Decision
-const DELIVERY_FEE_PAISE = 2000;
 
 export interface OrderView {
   id: string;
@@ -48,6 +48,8 @@ export class OrdersService {
     private readonly dataSource: DataSource,
     private readonly catalog: CatalogService,
     private readonly limits: OrderLimitsService,
+    private readonly pricing: PricingService,
+    private readonly events: EventsService,
   ) {}
 
   async create(
@@ -123,10 +125,11 @@ export class OrdersService {
           );
         }
 
-        const total = subtotal + DELIVERY_FEE_PAISE;
+        // दाम और डिलीवरी शुल्क सिर्फ़ सर्वर तय करता है
+        const price = this.pricing.quote(subtotal);
         // सीमा टूटे तो यहीं त्रुटि: पूरा Transaction वापस, यानी Stock भी लौट आता है
         if (standing) {
-          this.limits.enforce(standing, total);
+          this.limits.enforce(standing, price.totalPaise);
         }
 
         const entity = manager.create(Order, {
@@ -141,14 +144,23 @@ export class OrdersService {
           deliveryAddress: dto.deliveryAddress,
           status: 'CREATED',
           paymentMethod: 'COD',
-          subtotalPaise: subtotal,
-          deliveryFeePaise: DELIVERY_FEE_PAISE,
-          totalPaise: total,
+          subtotalPaise: price.subtotalPaise,
+          deliveryFeePaise: price.deliveryFeePaise,
+          totalPaise: price.totalPaise,
           idempotencyKey: idempotencyKey ?? null,
           requestHash,
           items,
         });
-        return manager.save(entity);
+        const created = await manager.save(entity);
+
+        // घटना उसी Transaction में: Order बना तो घटना भी, नहीं तो दोनों नहीं
+        await this.events.record(manager, OrderEvents.CREATED, created.id, {
+          orderId: created.id,
+          storeId: created.storeId,
+          customerId: created.customerId,
+          totalPaise: created.totalPaise,
+        });
+        return created;
       });
       return this.toView(saved);
     } catch (error) {
