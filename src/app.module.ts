@@ -5,9 +5,11 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { HealthController } from './health/health.controller';
 import { DatabaseModule } from './database/database.module';
 import { CatalogModule } from './catalog/catalog.module';
+import { CustomersModule } from './customers/customers.module';
 import { OrdersModule } from './orders/orders.module';
 import { DispatchModule } from './dispatch/dispatch.module';
 import { IdentityModule } from './identity/identity.module';
+import { OpsModule } from './ops/ops.module';
 
 @Module({
   imports: [
@@ -18,6 +20,8 @@ import { IdentityModule } from './identity/identity.module';
     CatalogModule,
     OrdersModule,
     DispatchModule,
+    OpsModule,
+    CustomersModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
