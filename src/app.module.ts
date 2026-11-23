@@ -10,6 +10,9 @@ import { OrdersModule } from './orders/orders.module';
 import { DispatchModule } from './dispatch/dispatch.module';
 import { IdentityModule } from './identity/identity.module';
 import { OpsModule } from './ops/ops.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { PaymentsModule } from './payments/payments.module';
+import { SettlementsModule } from './settlements/settlements.module';
 
 @Module({
   imports: [
@@ -22,6 +25,9 @@ import { OpsModule } from './ops/ops.module';
     DispatchModule,
     OpsModule,
     CustomersModule,
+    NotificationsModule,
+    PaymentsModule,
+    SettlementsModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
